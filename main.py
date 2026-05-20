@@ -3,25 +3,21 @@ import os
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from google import genai
+from google.genai import types as genai_types
 from config import BOT_TOKEN
 
 # Инициализация бота и диспетчера
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Инициализируем клиента Gemini (берет переменную GEMINI_API_KEY)
+# Инициализируем клиента Gemini (автоматически подтягивает GEMINI_API_KEY)
 gemini_client = genai.Client()
 
-# Создаем сессию чата с системной инструкцией роли
-gemini_chat = gemini_client.chats.create(
-    model="gemini-1.5-flash",
-    config={
-        "system_instruction": (
-            "Ты — квалифицированный, дружелюбный и мотивирующий личный фитнес-тренер "
-            "и нутрициолог. Отвечай на вопросы пользователя развернуто, профессионально, "
-            "давай практические советы по тренировкам и питанию."
-        )
-    }
+# Глобальная системная инструкция для роли тренера
+SYSTEM_INSTRUCTION = (
+    "Ты — квалифицированный, дружелюбный и мотивирующий личный фитнес-тренер "
+    "и нутрициолог. Отвечай на вопросы пользователя развернуто, профессионально, "
+    "давай практические советы по тренировкам и питанию."
 )
 
 # Обработчик команды /start
@@ -30,21 +26,28 @@ async def cmd_start(message: types.Message):
     await message.answer(
         "👋 Привет! Я твой персональный ИИ-тренер на базе Gemini.\n\n"
         "Ты можешь общаться со мной на любые темы: задавай вопросы про упражнения, "
-        "проси составить план питания, рецепты или программу тренировок. "
-        "Я помню контекст нашего разговора, так что мы можем вести полноценный диалог!"
+        "проси составить план питания, рецепты или программу тренировок."
     )
 
-# 🤖 ГЛАВНЫЙ ОБРАБОТЧИК: Отправка сообщений в Gemini
+# 🤖 ГЛАВНЫЙ ОБРАБОТЧИК: Прямой запрос к Gemini
 @dp.message(F.text)
 async def chat_with_gemini(message: types.Message):
-    # Сигнализируем, что бот печатает ответ
+    # Включаем статус "печатает..." в Telegram
     await bot.send_chat_action(chat_id=message.chat.id, action="typing")
     
     try:
-        # Отправляем текст пользователя в реальную чат-сессию Gemini
-        response = gemini_chat.send_message(message.text)
+        # Используем самый надежный метод generate_content напрямую.
+        # Передаем роль тренера через системную инструкцию в конфигурации.
+        response = gemini_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=message.text,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                temperature=0.7
+            )
+        )
         
-        # Отправляем ответ нейросети обратно пользователю
+        # Отправляем ответ пользователю в красивом Markdown-формате
         await message.answer(response.text, parse_mode="Markdown")
         
     except Exception as e:
@@ -74,13 +77,16 @@ async def start_dummy_server():
     print(f"Фейковый веб-сервер запущен на порту {port}")
     async with server:
         await server.serve_forever()
-# ------------------------------------------------------------
+
 
 async def main():
-    # Запускаем веб-сервер фоном
+    # Запускаем фоновый веб-сервер для прохождения проверок Render
     asyncio.create_task(start_dummy_server())
     
-    # Запускаем прослушивание сообщений Telegram
+    # Очищаем очередь старых сообщений, чтобы не ловить конфликты
+    await bot.delete_webhook(drop_pending_updates=True)
+    
+    # Запускаем поллинг бота
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
