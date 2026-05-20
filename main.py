@@ -5,15 +5,14 @@ from aiogram.filters import Command
 from google import genai
 from config import BOT_TOKEN
 
-# Инициализация бота и диспетчера aiogram
+# Инициализация бота и диспетчера
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Инициализируем клиента Gemini (код автоматически возьмет переменную GEMINI_API_KEY)
+# Инициализируем клиента Gemini (берет переменную GEMINI_API_KEY)
 gemini_client = genai.Client()
 
-# Создаем сессию чата с системной инструкцией.
-# Здесь задается роль нейросети — ты можешь изменить текст под свои задачи.
+# Создаем сессию чата с системной инструкцией роли
 gemini_chat = gemini_client.chats.create(
     model="gemini-1.5-flash",
     config={
@@ -38,15 +37,14 @@ async def cmd_start(message: types.Message):
 # 🤖 ГЛАВНЫЙ ОБРАБОТЧИК: Отправка сообщений в Gemini
 @dp.message(F.text)
 async def chat_with_gemini(message: types.Message):
-    # Показываем статус "печатает...", пока нейросеть формирует ответ
+    # Сигнализируем, что бот печатает ответ
     await bot.send_chat_action(chat_id=message.chat.id, action="typing")
     
     try:
-        # Отправляем текст пользователя в чат-сессию Gemini
+        # Отправляем текст пользователя в реальную чат-сессию Gemini
         response = gemini_chat.send_message(message.text)
         
-        # Отправляем ответ нейросети обратно пользователю в Telegram
-        # parse_mode="Markdown" позволяет Gemini красиво форматировать списки и жирный текст
+        # Отправляем ответ нейросети обратно пользователю
         await message.answer(response.text, parse_mode="Markdown")
         
     except Exception as e:
@@ -54,7 +52,7 @@ async def chat_with_gemini(message: types.Message):
         await message.answer("⚠️ Извини, произошла ошибка при обработке запроса. Попробуй еще раз.")
 
 
-# --- ФЕЙКОВЫЙ СЕРВЕР ДЛЯ ОБМАНА RENDER (БЕСПЛАТНЫЙ ТАРИФ) ---
+# --- ФЕЙКОВЫЙ СЕРВЕР ДЛЯ ОБМАНА RENDER ---
 async def handle_ping(reader, writer):
     await reader.read(1024)
     response = (
@@ -71,7 +69,6 @@ async def handle_ping(reader, writer):
     await writer.wait_closed()
 
 async def start_dummy_server():
-    # Render автоматически передает нужный порт в переменные окружения
     port = int(os.environ.get("PORT", 8000))
     server = await asyncio.start_server(handle_ping, '0.0.0.0', port)
     print(f"Фейковый веб-сервер запущен на порту {port}")
@@ -79,10 +76,8 @@ async def start_dummy_server():
         await server.serve_forever()
 # ------------------------------------------------------------
 
-
-# Главная функция запуска
 async def main():
-    # Запускаем веб-сервер фоном, чтобы Render не ругался на порты
+    # Запускаем веб-сервер фоном
     asyncio.create_task(start_dummy_server())
     
     # Запускаем прослушивание сообщений Telegram
